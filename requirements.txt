@@ -20,15 +20,15 @@ python-docx==1.1.2
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.3.5
 pytest-asyncio==0.23.8
-dotenv
+python-dotenv==1.2.2
 
 # ── Stage 05 — Query Agent ───────────────────────────────────────────
 # Vector store: faiss-cpu (replaces chromadb — 1.x API incompatible with NumPy 2.x)
 faiss-cpu==1.13.2
 numpy==1.26.4              # pinned: NumPy 2.x breaks onnxruntime + older embedding libs
 sentence-transformers==2.7.0
-streamlit==1.43.0
-plotly==5.22.0
-matplotlib==3.9.0
+streamlit==1.55.0
+plotly==6.6.0
+matplotlib==3.10.8
 seaborn==0.13.2
 RestrictedPython==7.4
