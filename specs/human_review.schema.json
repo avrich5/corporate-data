@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HumanReview",
+  "description": "Output of Stage 03 human review CLI.",
+  "type": "object",
+  "required": [
+    "source_semantic_file", "reviewed_at", "schema_version",
+    "reviewer", "stats", "answers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_semantic_file": { "type": "string" },
+    "reviewed_at":          { "type": "string" },
+    "schema_version":       { "type": "string", "enum": ["1.0"] },
+    "reviewer":             { "type": "string" },
+    "stats": {
+      "type": "object",
+      "required": [
+        "groups_presented", "items_confirmed", "items_rejected",
+        "items_edited_individually", "items_deferred", "free_text_answers"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "groups_presented":          { "type": "integer", "minimum": 0 },
+        "items_confirmed":           { "type": "integer", "minimum": 0 },
+        "items_rejected":            { "type": "integer", "minimum": 0 },
+        "items_edited_individually": { "type": "integer", "minimum": 0 },
+        "items_deferred":            { "type": "integer", "minimum": 0 },
+        "free_text_answers":         { "type": "integer", "minimum": 0 }
+      }
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "group_key", "group_size", "decision", "answered_at", "item_ids"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "group_key":   { "type": "string" },
+          "group_size":  { "type": "integer", "minimum": 1 },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "confirmed", "rejected",
+              "needs_reclassification", "deferred", "dry_run_skipped"
+            ]
+          },
+          "free_text":   { "type": ["string", "null"] },
+          "answered_at": { "type": "string" },
+          "item_ids":    { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

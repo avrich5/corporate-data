@@ -1,0 +1,98 @@
+{{ system_prompt }}
+
+=== FILE CONTEXT ===
+Source File: {{ source_file }}
+Total Sheets: {{ sheet_count }}
+Names: {{ sheet_names | join(", ") }}
+
+=== FINDINGS TO CLASSIFY ===
+{% if findings.mixed_sentinel %}
+[mixed_sentinel]
+Classify sentinel meaning. Options: "no_sales_status", "filter_artifact", "data_error", "unknown"
+
+CLASSIFICATION RULES (apply before scoring):
+- "no_sales_status": sentinel is a business/operational flag (e.g. "нет продаж", "нет продажів", "no sales")
+  appearing alongside real numeric metric values (prices, units, margins). The column IS a real metric.
+  ALWAYS use "no_sales_status" for BCG, ABC, Факт sheets where the column contains Продажи/Доход/Маржа.
+- "filter_artifact": sentinel IS a column header name, category name, or methodology description
+  that accidentally leaked into a data column due to Excel pivot/slide formatting.
+  The cell content looks like a label, not a numeric placeholder.
+  Example: sentinel="Стулья Барные" in a Продажи column = filter artifact.
+  Example: sentinel="сравниваем 1 полугодие" in a numeric column = filter artifact.
+- If the sentinel is "нет продаж" (or variations) AND the sheet is BCG/ABC/Факт продаж → ALWAYS "no_sales_status".
+{% for item in findings.mixed_sentinel %}
+- Sheet: {{ item.sheet }} | Field: {{ item.field }}
+  Sentinels: {{ item.sentinels | join(', ') }}
+  Sample Values: {{ item.sample_values | join(', ') }}
+  Categorical Values: {{ item.categorical_values | join(', ') }}
+  Layout Type: {{ item.layout_type }}
+{% endfor %}
+{% endif %}
+
+{% if findings.join_candidate %}
+[join_candidate]
+Classify join capability. Options: "confirmed_join", "probable_join", "false_positive"
+{% for item in findings.join_candidate %}
+- Field: {{ item.field }}
+  Overlap Score: {{ item.overlap }}
+  Sheets Found In: {{ item.sheets | join(', ') }}
+{% endfor %}
+{% endif %}
+
+{% if findings.layout_interpretation %}
+[layout_interpretation]
+Classify horizontal layout period representation.
+period_semantic options: "quarter", "half_year", "month", "unknown"
+period_direction options: "comparison_over_time", "parallel_channels", "unknown"
+* Extract ONLY period names from the raw period labels (ignore floats, description text or metrics in labels).
+{% for item in findings.layout_interpretation %}
+- Sheet: {{ item.sheet }} | Periods Count: {{ item.period_count }}
+  Raw Period Labels: {{ item.period_labels | join(', ') }}
+{% endfor %}
+{% endif %}
+
+{% if findings.anomaly_row_intent %}
+[anomaly_row_intent]
+Classify intent of row. Options: "grand_total", "section_header", "metadata", "data_row"
+{% for item in findings.anomaly_row_intent %}
+- Sheet: {{ item.sheet }} | Row: {{ item.row_index }}
+  Matched Keyword/Content: {{ item.content }}
+{% endfor %}
+{% endif %}
+
+{% if findings.empty_column_intent %}
+[empty_column_intent]
+Classify reason for empty column. Options: "spacer", "placeholder", "artifact"
+{% for item in findings.empty_column_intent %}
+- Sheet: {{ item.sheet }} | Field: {{ item.field }}
+{% endfor %}
+{% endif %}
+
+{% if findings.sheet_role %}
+[sheet_role]
+Classify sheet purpose. Options: "primary_data", "detail_data", "aggregated", "source_data", "plan_data", "presentation", "unknown"
+{% for item in findings.sheet_role %}
+- Sheet: {{ item.sheet }}
+  Layout: {{ item.layout_type }}
+  Columns (first 20 of {{ item.total_columns }}): {{ item.columns | join(', ') }}
+{% endfor %}
+{% endif %}
+
+=== SCHEMA INSTRUCTION ===
+Return a JSON object with keys: "resolved", "confirm_queue", "escalate_queue"
+Each item must have:
+- finding_type
+- sheet
+- field (if applicable, else "")
+- hypothesis (must be one of the exact string options listed above)
+- confidence (0.0 to 1.0)
+- evidence (list of structural fact explanations, max 4 strings)
+For "confirm_queue" and "escalate_queue" add: "question_for_human"
+  - question_for_human must be a clear, plain-language question in the same language as the data (Ukrainian/Russian).
+  - Do NOT use technical terms like "section_header", "grand_total", "spacer" in question_for_human.
+  - Instead describe what was found and ask a specific yes/no question. Examples:
+    * BAD:  "Підтвердіть гіпотезу section_header для рядку 15"
+    * GOOD: "Рядок 15 на листі «Тренды категорий» виглядає як заголовок нового блоку (починається блок маржі після блоку доходів). Це правильно?"
+    * BAD:  "Підтвердіть grand_total"
+    * GOOD: "Рядок 17 «Загальний підсумок» — це підсумковий рядок, який не є даними продукту. Виключити його з аналізу?"
+Always return raw JSON. DO NOT use markdown blocks or preamble.

@@ -1,0 +1,175 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "source_structural_file": {
+            "type": "string"
+        },
+        "analyzed_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "schema_version": {
+            "type": "string"
+        },
+        "provider_strategy": {
+            "type": "string",
+            "enum": [
+                "compete",
+                "single_anthropic",
+                "single_openai"
+            ]
+        },
+        "winner_provider": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "enum": [
+                "anthropic",
+                "openai",
+                null
+            ]
+        },
+        "resolved": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/resolved_finding"
+            }
+        },
+        "confirm_queue": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/queued_finding"
+            }
+        },
+        "escalate_queue": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/queued_finding"
+            }
+        },
+        "compete_log": {
+            "type": [
+                "object",
+                "null"
+            ],
+            "properties": {
+                "anthropic_confidence_sum": {
+                    "type": "number"
+                },
+                "openai_confidence_sum": {
+                    "type": "number"
+                },
+                "winner": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "anthropic_raw_response_hash": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "openai_raw_response_hash": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "required": [
+        "source_structural_file",
+        "analyzed_at",
+        "schema_version",
+        "provider_strategy",
+        "resolved",
+        "confirm_queue",
+        "escalate_queue"
+    ],
+    "definitions": {
+        "base_finding": {
+            "type": "object",
+            "properties": {
+                "finding_type": {
+                    "type": "string",
+                    "enum": [
+                        "mixed_sentinel",
+                        "join_candidate",
+                        "layout_interpretation",
+                        "anomaly_row_intent",
+                        "empty_column_intent",
+                        "sheet_role"
+                    ]
+                },
+                "sheet": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "hypothesis": {
+                    "type": "string"
+                },
+                "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "evidence": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "maxItems": 4
+                },
+                "provider": {
+                    "type": "string",
+                    "enum": [
+                        "anthropic",
+                        "openai"
+                    ]
+                },
+                "model": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "finding_type",
+                "sheet",
+                "field",
+                "hypothesis",
+                "confidence",
+                "evidence",
+                "provider",
+                "model"
+            ]
+        },
+        "resolved_finding": {
+            "$ref": "#/definitions/base_finding"
+        },
+        "queued_finding": {
+            "allOf": [
+                {
+                    "$ref": "#/definitions/base_finding"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "question_for_human": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "question_for_human"
+                    ]
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,108 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Final Output Schema",
+    "type": "object",
+    "required": [
+        "assembled_at",
+        "total_tables",
+        "tables",
+        "relationships",
+        "metadata"
+    ],
+    "properties": {
+        "assembled_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "total_tables": {
+            "type": "integer"
+        },
+        "metadata": {
+            "type": "object",
+            "properties": {
+                "analysis_model": {
+                    "type": "string"
+                },
+                "strategy": {
+                    "type": "string"
+                }
+            }
+        },
+        "tables": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "columns"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "columns": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "field_name",
+                                "data_type"
+                            ],
+                            "properties": {
+                                "field_name": {
+                                    "type": "string"
+                                },
+                                "data_type": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "categorical_values": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "sentinel_values": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "relationships": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "source_table",
+                    "target_table",
+                    "join_keys"
+                ],
+                "properties": {
+                    "source_table": {
+                        "type": "string"
+                    },
+                    "target_table": {
+                        "type": "string"
+                    },
+                    "join_keys": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

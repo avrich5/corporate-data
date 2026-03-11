@@ -1,0 +1,32 @@
+# virtual environment
+.venv/
+
+# secrets
+.env
+
+# outputs (большие файлы — не в репо)
+outputs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# logs
+logs/
+debug.log
+
+# scratch / debug files
+debug_*.py
+explore_*.py
+STAGE1_FINDINGS.md
+
+# sources (real data, not committed)
+sources/
+
+# targets (intermediate files)
+targets/

@@ -1,0 +1,105 @@
+# Architectural Principles — corporate-data pipeline
+# Role: AI agents write code. Humans do research & architecture.
+# This file is the single source of truth for all coding decisions.
+
+# ─── Code Style ───────────────────────────────────────────────
+# PEP 8 strictly enforced (use ruff or flake8)
+# Type hints on every function signature (mypy --strict)
+# Google-style docstrings on every public function and class
+# Max 50 lines per function — split if longer
+# Max 120 characters per line
+# English only: variable names, comments, docstrings, logs
+
+# ─── Design ───────────────────────────────────────────────────
+# SOLID: Single Responsibility — one class/module does one thing
+# Dependency Injection: pass dependencies as arguments, no globals
+# Open/Closed: extend existing modules, never duplicate logic
+# No magic values: all thresholds, paths, model names in config
+# Configuration over code: use env vars or config files
+# Prefer composition over inheritance
+
+# ─── No Duplication ───────────────────────────────────────────
+# Common logic (classification, KPI parsing, schema validation)
+#   lives in utils/ — import from there, never re-implement
+# If you write the same logic twice — stop and refactor first
+
+# ─── Data & I/O ───────────────────────────────────────────────
+# Source files are READ-ONLY — never modify inputs
+# All intermediate outputs go to outputs/ with ISO timestamp suffix
+#   example: outputs/schema_2025-03-11T14-32-00.json
+# Inter-stage format: JSON validated against JSON Schema
+#   each stage validates its input before processing
+# File paths come from config, never hardcoded in business logic
+
+# ─── LLM-Specific ─────────────────────────────────────────────
+# Prompts are separate files: prompts/*.jinja2 (not strings in code)
+# Every LLM call logs: model, temperature, prompt_tokens,
+#   completion_tokens, input_hash, output, timestamp
+# Retry with exponential backoff: max 3 retries, base delay 2s
+# Max context length is a config parameter (default: 8000 tokens)
+# Temperature default: 0.0 for classification, 0.3 for generation
+# Never parse LLM output with regex — use structured output (JSON mode)
+
+# ─── Observability ────────────────────────────────────────────
+# Structured logging in JSON format — no bare print() statements
+# Use Python logging module with JSONFormatter
+# Every pipeline stage logs on entry and exit:
+#   - stage name, input parameters, output summary, duration_ms
+# Separate audit.log for model decisions:
+#   - what was resolved automatically (with confidence score)
+#   - what was sent for human confirmation
+#   - what was escalated as unresolvable
+# Log levels: DEBUG for raw data, INFO for decisions, WARNING for
+#   low-confidence results, ERROR for failures
+
+# ─── Reproducibility ──────────────────────────────────────────
+# requirements.txt uses pinned versions (== not >=)
+# .env.example committed alongside .env (never commit .env)
+# Random seeds set explicitly where randomness is used
+# Each pipeline run writes a run_manifest.json:
+#   - timestamp, input file hash (sha256), config snapshot,
+#     model versions used, output file paths
+
+# ─── Testability ──────────────────────────────────────────────
+# Mock all external API calls — tests never hit the network
+# Fixtures in tests/fixtures/ with real anonymized data samples
+# Each pipeline stage must be runnable in isolation:
+#   python -m pipeline.stage_01_extract --input data.json
+# Unit tests cover: classifiers, parsers, schema validators
+# Integration test: full pipeline on fixture file, assert schema
+
+# ─── Pipeline Stages Contract ─────────────────────────────────
+# Stage 01 — Structural Extractor (script):
+#   input:  Excel file path
+#   output: outputs/structural_<timestamp>.json
+# Stage 02 — Semantic Analyzer (LLM):
+#   input:  structural JSON
+#   output: outputs/semantic_<timestamp>.json
+#     contains: resolved[], confirm_queue[], escalate_queue[]
+# Stage 03 — Human Review (CLI prompt or web form):
+#   input:  confirm_queue + escalate_queue
+#   output: outputs/human_review_<timestamp>.json
+# Stage 04 — Schema Assembler:
+#   input:  semantic JSON + human review JSON
+#   output: outputs/final_schema_<timestamp>.json + .docx report
+
+# ─── What Agents Must NOT Do ──────────────────────────────────
+# Do not modify source Excel files
+# Do not hardcode file paths — use config.py or env vars
+# Do not swallow exceptions silently — log then re-raise
+# Do not call LLM API more than once for the same input
+#   (cache responses by input hash during development)
+# Do not create parallel implementations of existing utilities
+
+# ─── Paths ────────────────────────────────────────────────────
+# All paths in the project MUST be relative to the project root.
+# Never use absolute paths in code, configs, or specs.
+# Compute project root once in config.py using:
+#   BASE_DIR = Path(__file__).parent
+# Then derive all other paths from BASE_DIR:
+#   OUTPUTS_DIR = BASE_DIR / "outputs"
+#   SPECS_DIR   = BASE_DIR / "specs"
+# Pass resolved Path objects between modules — never raw strings.
+# Relative paths make the project portable across machines and CI.
+# Exception: .env file values (OS-level) may contain absolute paths,
+#   but config.py must wrap them with Path() and never expose them raw.

@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StructuralReport",
+  "description": "Output of Stage 01 structural extractor.",
+  "type": "object",
+  "required": [
+    "source_file", "source_file_sha256", "extracted_at",
+    "schema_version", "sheet_count", "sheet_names",
+    "join_candidates", "sheets"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_file":        { "type": "string" },
+    "source_file_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "extracted_at":       { "type": "string", "format": "date-time" },
+    "schema_version":     { "type": "string", "enum": ["1.0"] },
+    "sheet_count":        { "type": "integer", "minimum": 1 },
+    "sheet_names":        { "type": "array", "items": { "type": "string" } },
+    "join_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["column", "normalized", "found_in_sheets", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "column":               { "type": "string" },
+          "normalized":           { "type": "string" },
+          "found_in_sheets":      { "type": "array", "items": { "type": "string" } },
+          "confidence":           { "type": "string", "enum": ["high", "medium"] },
+          "unique_value_overlap": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "sheets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "sheet_name", "raw_shape", "data_shape",
+          "header_row_index", "data_start_row", "multi_row_header",
+          "layout_type", "duplicate_col_names", "anomaly_rows", "columns"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sheet_name":         { "type": "string" },
+          "raw_shape":          { "$ref": "#/definitions/shape" },
+          "data_shape":         { "$ref": "#/definitions/shape" },
+          "header_row_index":   { "type": "integer", "minimum": 0 },
+          "data_start_row":     { "type": "integer", "minimum": 0 },
+          "multi_row_header":   { "type": "boolean" },
+          "layout_type": {
+            "type": "string",
+            "enum": ["standard", "horizontal_periods", "metadata_heavy", "report"]
+          },
+          "period_count":  { "type": ["integer", "null"], "minimum": 2 },
+          "period_labels": { "type": ["array", "null"], "items": { "type": "string" } },
+          "duplicate_col_names": { "type": "array", "items": { "type": "string" } },
+          "anomaly_rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["row_index", "reason", "first_cell"],
+              "properties": {
+                "row_index":  { "type": "integer" },
+                "reason":     { "type": "string", "enum": ["keyword", "separator"] },
+                "first_cell": { "type": "string" }
+              }
+            }
+          },
+          "columns": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/definitions/column_meta" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "shape": {
+      "type": "object",
+      "required": ["rows", "cols"],
+      "properties": {
+        "rows": { "type": "integer", "minimum": 0 },
+        "cols": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "column_meta": {
+      "type": "object",
+      "required": [
+        "dominant_type", "null_rate", "unique_count",
+        "mixed", "mixed_sentinel_values",
+        "is_categorical", "categorical_values", "sample_values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dominant_type": {
+          "type": "string",
+          "enum": ["numeric", "numeric_string", "string", "other", "empty"]
+        },
+        "null_rate":             { "type": "number", "minimum": 0, "maximum": 1 },
+        "unique_count":          { "type": "integer", "minimum": 0 },
+        "mixed":                 { "type": "boolean" },
+        "mixed_detail":          { "type": "object" },
+        "mixed_sentinel_values": { "type": "array", "items": { "type": "string" } },
+        "is_categorical":        { "type": "boolean" },
+        "categorical_values":    { "type": "array", "items": { "type": "string" } },
+        "sample_values":         { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
