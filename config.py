@@ -6,6 +6,12 @@ No magic numbers anywhere else in the codebase.
 import os
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # loads .env before any os.getenv() calls
+except ImportError:
+    pass  # python-dotenv not installed — rely on env vars set externally
+
 # ─── Paths ────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
@@ -102,32 +108,4 @@ CHART_DPI = int(os.getenv("CHART_DPI", "150"))
 CHART_LOCALE = os.getenv("CHART_LOCALE", "ru_RU")
 CHART_COLORMAP = os.getenv("CHART_COLORMAP", "tab10")
 
-# ─── Stage 05: Vector Store ──────────────────────────────────────────
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
-# "openai" → text-embedding-3-small (потребує OPENAI_API_KEY)
-# "local"  → sentence-transformers/all-MiniLM-L6-v2 (без API, повільніше)
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-VECTOR_STORE_DIR = Path(os.getenv("VECTOR_STORE_DIR", str(OUTPUTS_DIR / "vector_store")))
-RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "10"))
-RETRIEVAL_MIN_SCORE = float(os.getenv("RETRIEVAL_MIN_SCORE", "0.55"))
-
-# ─── Stage 05: Query Generator ───────────────────────────────────────
-QUERY_GEN_MODEL = os.getenv("QUERY_GEN_MODEL", ANTHROPIC_MODEL)
-QUERY_GEN_MAX_TOKENS = int(os.getenv("QUERY_GEN_MAX_TOKENS", "2048"))
-QUERY_GEN_TEMPERATURE = float(os.getenv("QUERY_GEN_TEMPERATURE", "0.0"))
-QUERY_CONTEXT_MAX_TOKENS = int(os.getenv("QUERY_CONTEXT_MAX_TOKENS", "6000"))
-QUERY_SAMPLE_ROWS = int(os.getenv("QUERY_SAMPLE_ROWS", "3"))
-QUERY_MAX_RETRIES = int(os.getenv("QUERY_MAX_RETRIES", "2"))
-
-# ─── Stage 05: Executor ──────────────────────────────────────────────
-EXECUTOR_TIMEOUT = int(os.getenv("EXECUTOR_TIMEOUT", "30"))
-EXECUTOR_MAX_ROWS = int(os.getenv("EXECUTOR_MAX_ROWS", "10000"))
-EXECUTOR_SAVE_CODE = os.getenv("EXECUTOR_SAVE_CODE", "true").lower() == "true"
-EXECUTOR_ALLOWED_IMPORTS = ["pandas", "numpy", "datetime", "re", "json", "collections"]
-
-# ─── Stage 05: Chart Builder ──────────────────────────────────────────
-CHART_DEFAULT_TYPE = os.getenv("CHART_DEFAULT_TYPE", "auto")
-CHART_OUTPUT_FORMAT = os.getenv("CHART_OUTPUT_FORMAT", "png")
-CHART_DPI = int(os.getenv("CHART_DPI", "150"))
-CHART_LOCALE = os.getenv("CHART_LOCALE", "ru_RU")
-CHART_COLORMAP = os.getenv("CHART_COLORMAP", "tab10")
+# (duplicate Stage 05 block removed — defined above)
