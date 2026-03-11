@@ -82,6 +82,41 @@
 # Stage 04 — Schema Assembler:
 #   input:  semantic JSON + human review JSON
 #   output: outputs/final_schema_<timestamp>.json + .docx report
+#
+# Stage 05 — Query Agent (pipeline/stage_05*.py + app/query_ui.py)
+#   05d — Executor (sandbox):
+#     input:  Python code string
+#     output: ExecutionResult(dataframe | None, error | None, code_used)
+#     rules:  RestrictedPython sandbox, timeout=EXECUTOR_TIMEOUT,
+#             whitelist imports only (EXECUTOR_ALLOWED_IMPORTS in config)
+#             never writes files, never accesses network
+#   05c — Generator (Text-to-Python):
+#     input:  user query string + schema context (JSON subset of final_schema)
+#     output: Python/pandas code string
+#     rules:  prompts/query_generator.jinja2, JSON mode off (raw code),
+#             temperature=QUERY_GEN_TEMPERATURE (default 0.0),
+#             P1 implementation: pass full final_schema (no retrieval yet)
+#   05e — Chart Builder:
+#     input:  DataFrame + chart_type hint
+#     output: PNG bytes | plotly Figure
+#     rules:  auto-select chart type if hint=="auto"
+#   05a — Embedder (P3, after 05c/05d work):
+#     input:  final_schema JSON
+#     output: ChromaDB collection in VECTOR_STORE_DIR
+#   05b — Retriever (P3, after 05a):
+#     input:  user query string
+#     output: top-K schema fields (list of dicts)
+#   app/query_ui.py — Streamlit UI:
+#     operator sees: query box, result table, chart — NO code
+#     admin panel: separate page /admin, password-protected
+#     all config params editable in sidebar (session_state only)
+#
+# Stage 05 error model:
+#   auto-retry up to QUERY_MAX_RETRIES — invisible to operator
+#   after retries exhausted: show 'Не вдалося отримати відповідь'
+#   write audit log entry with label failed_auto
+#   admin receives notification (stdout warning + audit log)
+#   operator NEVER sees generated code or error tracebacks
 
 # ─── What Agents Must NOT Do ──────────────────────────────────
 # Do not modify source Excel files

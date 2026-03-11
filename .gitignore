@@ -23,6 +23,7 @@ debug.log
 # scratch / debug files
 debug_*.py
 explore_*.py
+parse_docx.py
 STAGE1_FINDINGS.md
 
 # sources (real data, not committed)
