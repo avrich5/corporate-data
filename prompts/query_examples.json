@@ -1,0 +1,10 @@
+[
+    {
+        "query": "Топ-5 категорій по доходу за IV кв 2024",
+        "code": "df = dfs['BCG']\ndf_clean = df[df['Доход, грн. (IV кв 2024)'] != 'нет продаж']\ndf_sorted = df_clean.sort_values(by='Доход, грн. (IV кв 2024)', ascending=False)\nresult = df_sorted[['КАТЕГОРИЯ', 'ЛИНИЯ МОДЕЛИ', 'Доход, грн. (IV кв 2024)']].head(5)"
+    },
+    {
+        "query": "BCG матриця: які категорії перейшли з Собака в Корову?",
+        "code": "df = dfs['BCG']\n# Filtering changes from Q3 2024 to Q4 2024\nmoved = df[(df['Группа по BCG (III кв 2024)'] == 'Собака') & (df['Группа по BCG (IV кв 2024)'] == 'Дойная корова')]\nresult = moved[['КАТЕГОРИЯ', 'ЛИНИЯ МОДЕЛИ']]"
+    }
+]

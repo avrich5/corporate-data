@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from anthropic import AsyncAnthropic, APIError as AnthropicAPIError
 from openai import AsyncOpenAI, APIError as OpenAIAPIError
 
-logger = logging.getLogger(__name__)
+import config
 
-LLM_RETRY_MAX = 3
-LLM_RETRY_BASE_DELAY = 1.0
+logger = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
@@ -35,15 +34,15 @@ class BaseClient:
         return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
     async def _retry_with_backoff(self, coro_func, *args, **kwargs):
-        delay = LLM_RETRY_BASE_DELAY
-        for attempt in range(LLM_RETRY_MAX):
+        delay = config.LLM_RETRY_BASE_DELAY
+        for attempt in range(config.LLM_RETRY_MAX):
             try:
                 return await coro_func(*args, **kwargs)
             except Exception as e:
                 # Catching general Exception to allow unifying Anthropic/OpenAI
-                is_last_attempt = attempt == LLM_RETRY_MAX - 1
+                is_last_attempt = attempt == config.LLM_RETRY_MAX - 1
                 if is_last_attempt:
-                    raise LLMError(f"API failed after {LLM_RETRY_MAX} attempts: {e}") from e
+                    raise LLMError(f"API failed after {config.LLM_RETRY_MAX} attempts: {e}") from e
                 
                 logger.warning(f"API attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
                 await asyncio.sleep(delay)
@@ -51,20 +50,27 @@ class BaseClient:
 
 
 class AnthropicClient(BaseClient):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str = config.ANTHROPIC_MODEL):
         self.client = AsyncAnthropic(api_key=api_key)
-        self.model = "claude-sonnet-4-5"
+        self.model = model
 
-    async def complete(self, prompt: str, system: str) -> LLMResponse:
+    async def complete(
+        self,
+        prompt: str,
+        system: str,
+        max_tokens: int = 4096,
+        temperature: float = 0.0,
+        json_mode: bool = False,  # ignored for Anthropic (no native json_mode)
+    ) -> LLMResponse:
         input_hash = self._compute_hash(system, prompt)
-        
+
         async def _call():
             resp = await self.client.messages.create(
                 model=self.model,
-                max_tokens=16000,
+                max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0
+                temperature=temperature,
             )
             if resp.stop_reason != "end_turn":
                 logger.warning(
@@ -85,23 +91,33 @@ class AnthropicClient(BaseClient):
 
 
 class OpenAIClient(BaseClient):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str = config.OPENAI_MODEL):
         self.client = AsyncOpenAI(api_key=api_key)
-        self.model = "gpt-4o"
+        self.model = model
 
-    async def complete(self, prompt: str, system: str) -> LLMResponse:
+    async def complete(
+        self,
+        prompt: str,
+        system: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        json_mode: bool = False,
+    ) -> LLMResponse:
         input_hash = self._compute_hash(system, prompt)
-        
+
         async def _call():
-            resp = await self.client.chat.completions.create(
+            kwargs: dict = dict(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
-                temperature=0.0,
-                response_format={ "type": "json_object" }
+                max_tokens=max_tokens,
+                temperature=temperature,
             )
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            resp = await self.client.chat.completions.create(**kwargs)
             content = resp.choices[0].message.content
             # Safely grab usage if present
             usage = resp.usage
