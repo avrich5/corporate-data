@@ -23,7 +23,9 @@ pytest-asyncio==0.23.8
 dotenv
 
 # ── Stage 05 — Query Agent ───────────────────────────────────────────
-chromadb==0.4.24
+# Vector store: faiss-cpu (replaces chromadb — 1.x API incompatible with NumPy 2.x)
+faiss-cpu==1.13.2
+numpy==1.26.4              # pinned: NumPy 2.x breaks onnxruntime + older embedding libs
 sentence-transformers==2.7.0
 streamlit==1.43.0
 plotly==5.22.0
