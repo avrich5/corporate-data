@@ -18,6 +18,52 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def load_excel_sheets(excel_path: str) -> Dict[str, pd.DataFrame]:
+    """Loads all sheets from an Excel file, auto-detecting header rows.
+
+    Uses the same header detection logic as stage_01: reads raw (header=None),
+    searches the first HEADER_SEARCH_MAX_ROWS rows for the row with the most
+    non-null string values, then re-reads with header=<detected_row>.
+    Falls back to header=0 if detection fails.
+    """
+    import warnings
+    xl = pd.ExcelFile(excel_path)
+    dfs: Dict[str, pd.DataFrame] = {}
+
+    for sheet in xl.sheet_names:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            raw = xl.parse(sheet, header=None)
+
+        max_search = min(config.HEADER_SEARCH_MAX_ROWS, len(raw))
+        best_row, best_score = 0, -1
+        for i in range(max_search):
+            row = raw.iloc[i]
+            # Score = number of unique non-numeric string values
+            # Header rows have many distinct labels; data rows have repeated values / numbers
+            str_vals = [str(v).strip() for v in row
+                        if pd.notna(v) and str(v).strip() not in ("", "nan")]
+            try:
+                unique_strings = sum(1 for v in str_vals
+                                     if not pd.to_numeric(v, errors='coerce') == pd.to_numeric(v, errors='coerce'))
+            except Exception:
+                unique_strings = 0
+            score = len(set(str_vals)) + unique_strings * 2  # weight unique text heavily
+            if score > best_score:
+                best_score, best_row = score, i
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            df = xl.parse(sheet, header=best_row)
+
+        # Drop fully-empty rows and columns
+        df = df.dropna(how="all").dropna(axis=1, how="all")
+        dfs[sheet] = df
+        logger.debug("Sheet '%s': header_row=%d  shape=%s", sheet, best_row, df.shape)
+
+    return dfs
+
+
 def _guarded_getattr(obj: Any, attr: str) -> Any:
     """Safely gets attributes, allowing standard pandas usage but blocking internal magic."""
     if attr.startswith("__") and attr.endswith("__") and attr not in {
