@@ -99,6 +99,19 @@ schema_files = list(outputs_dir.glob("final_schema_*.json"))
 excel_path = st.sidebar.selectbox("Excel файл", excel_files, format_func=lambda x: x.name if x else "Не знайдено")
 schema_path = st.sidebar.selectbox("Схема даних (Schema)", schema_files, format_func=lambda x: x.name if x else "Не знайдено")
 
+if st.sidebar.button("Перебудувати vector store", type="primary"):
+    if schema_path:
+        with st.spinner("Будуємо vector store..."):
+            from pipeline.stage_05a_embed import SchemaEmbedder
+            import json
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema_data = json.load(f)
+            embedder = SchemaEmbedder()
+            embedder.embed_schema(schema_data)
+        st.sidebar.success("Vector store оновлено!")
+    else:
+        st.sidebar.error("Виберіть final_schema.json")
+
 if excel_path:
     with st.spinner("Завантаження даних..."):
         load_data(excel_path)
@@ -131,14 +144,39 @@ if execute_clicked and query:
 
     progress_bar = st.progress(0, text="Очікування...")
     
-    # 1. Retrieval (Skipped for P1/P2 - full schema)
-    progress_bar.progress(25, text="Retrieval... (в цій версії - повна схема)")
-    time.sleep(0.5)
+    # 1. Retrieval
+    progress_bar.progress(25, text="Retrieval... (пошук релевантних полів)")
+    from pipeline.stage_05b_retrieve import SchemaRetriever
+    try:
+        retriever = SchemaRetriever()
+        retrieved_schema = retriever.retrieve(
+            query=query,
+            top_k=st.session_state.config.get("RETRIEVAL_TOP_K", 10),
+            min_score=st.session_state.config.get("RETRIEVAL_MIN_SCORE", 0.55)
+        )
+        
+        # Count total retrieved columns for UI stat
+        total_cols = sum(len(t.get("columns", [])) for t in retrieved_schema.get("tables", []))
+        progress_bar.progress(35, text=f"Retrieval... знайдено {total_cols} полів")
+        time.sleep(0.5)
+        
+    except Exception as retrieval_err:
+        progress_bar.empty()
+        logger.error("Retrieval failed: %s", retrieval_err, exc_info=True)
+        st.warning("⚠️ Не вдалося отримати відповідь на ваш запит.")
+        st.info("Спробуйте переформулювати запит або зверніться до адміністратора.")
+        if st.button("Переформулювати", key="rephrase_retrieval"):
+            st.rerun()
+        st.stop()
 
     # 2. Generation 
     progress_bar.progress(50, text="Generation... (Генерація Python-коду)")
     try:
         generator = QueryGenerator(schema_path=schema_path)
+        # Pass retrieved sub-schema instead of full schema
+        # Generator serializes self.schema_data in generate_code — replacing it here
+        # is correct: no disk write, no config mutation
+        generator.schema_data = retrieved_schema
         
         # Apply session_state config overrides to generator (no mutation of module-level config)
         selected_model = st.session_state.config["QUERY_GEN_MODEL"]
