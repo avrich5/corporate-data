@@ -23,23 +23,35 @@ except locale.Error:
 
 
 class ChartBuilder:
-    """Generates charts from pandas DataFrames."""
+    """Generates charts from pandas DataFrames.
+    
+    Usage:
+        builder = ChartBuilder()                        # no args
+        png_bytes, fig = builder.build(df, query=...)   # df passed here
+    
+    Legacy usage still works:
+        builder = ChartBuilder(df=df, chart_type='bar')
+        png_bytes, fig = builder.build()
+    """
 
-    def __init__(self, df: pd.DataFrame, chart_type: str = "auto"):
-        self.df = df
-        self.chart_type = chart_type if chart_type != "auto" else self._auto_detect_chart_type()
+    def __init__(self, df: Optional[pd.DataFrame] = None, chart_type: str = "auto"):
+        self._df = df
+        self._default_chart_type = chart_type
+        # If df provided at init time, pre-detect type (legacy path)
+        if df is not None and chart_type == "auto":
+            self.chart_type = self._auto_detect_chart_type(df)
+        else:
+            self.chart_type = chart_type
 
-    def _auto_detect_chart_type(self) -> str:
+    def _auto_detect_chart_type(self, df: pd.DataFrame) -> str:
         """Heuristics to detect the best chart type for the given DataFrame."""
-        if self.df.empty:
+        if df.empty:
             return "none"
         
-        columns = self.df.columns.tolist()
-        num_cols = self.df.select_dtypes(include='number').columns.tolist()
-        cat_cols = self.df.select_dtypes(exclude='number').columns.tolist()
+        columns = df.columns.tolist()
+        num_cols = df.select_dtypes(include='number').columns.tolist()
+        cat_cols = df.select_dtypes(exclude='number').columns.tolist()
 
-        # BCG Scatter check: needs "Рост", "Доля", "Продажи" (or similar semantics)
-        # Note: adjust these keywords based on exact schema if needed
         scatter_keywords_x = ['рост']
         scatter_keywords_y = ['доля']
         scatter_keywords_size = ['продажи', 'доход']
@@ -51,33 +63,55 @@ class ChartBuilder:
         if has_x and has_y and has_size and len(num_cols) >= 3:
             return "scatter"
 
-        # Line check: if there's a date/time/quarter column
-        date_keywords = ['дата', 'период', 'кв ', 'месяц', 'год']
+        date_keywords = ['дата', 'период', 'кв ', 'місяць', 'рік', 'месяц', 'год']
         has_date = any(any(kw in c.lower() for kw in date_keywords) for c in columns)
         if has_date and len(num_cols) >= 1:
             return "line"
 
-        # Bar check: categorical vs numerical
         if len(cat_cols) >= 1 and len(num_cols) >= 1:
-            return "bar"
+            if len(df) <= 4 and len(num_cols) == 1:
+                return "pie"
+            return "barh" if len(df) > 6 else "bar"
 
-        # Pie check (fallback for single numerical col with < 20 rows)
-        if len(num_cols) == 1 and len(self.df) <= 20 and len(cat_cols) == 1:
-            return "pie"
-            
-        # Fallback
-        if len(num_cols) == 1:
+        if len(num_cols) >= 1:
             return "barh"
 
         return "table_styled"
 
-    def build(self) -> Tuple[Optional[bytes], Optional[Any]]:
-        """Builds the chart based on the format in config.
-        
+    def build(
+        self,
+        df: Optional[pd.DataFrame] = None,
+        query: str = "",
+        chart_type: str = "auto",
+    ) -> Tuple[Optional[bytes], Optional[Any]]:
+        """Builds the chart.
+
+        Args:
+            df: DataFrame to chart. If omitted, uses df passed to __init__.
+            query: Original user query — used as chart title.
+            chart_type: Override chart type. "auto" = detect from data.
+
         Returns:
-            Tuple containing (PNG bytes if output is png/both, Plotly Figure if html/both).
+            Tuple of (PNG bytes, Plotly Figure). Either can be None
+            depending on config.CHART_OUTPUT_FORMAT.
         """
-        if self.chart_type == "none" or self.chart_type == "table_styled":
+        # Resolve which df to use
+        active_df = df if df is not None else self._df
+        if active_df is None or active_df.empty:
+            return None, None
+
+        # Resolve chart type: call arg > __init__ arg > auto-detect
+        if chart_type != "auto":
+            self.chart_type = chart_type
+        elif self._default_chart_type != "auto":
+            self.chart_type = self._default_chart_type
+        else:
+            self.chart_type = self._auto_detect_chart_type(active_df)
+
+        self._active_df = active_df
+        self._query = query
+
+        if self.chart_type in ("none", "table_styled"):
             return None, None
 
         out_format = config.CHART_OUTPUT_FORMAT.lower()
@@ -86,7 +120,7 @@ class ChartBuilder:
 
         if out_format in ("png", "both"):
             png_bytes = self._build_matplotlib()
-            
+
         if out_format in ("html", "both"):
             html_fig = self._build_plotly()
 
@@ -94,65 +128,65 @@ class ChartBuilder:
 
     def _build_matplotlib(self) -> Optional[bytes]:
         """Generates static matplotlib chart and returns PNG bytes."""
+        df = self._active_df
         fig, ax = plt.subplots(figsize=(10, 6), dpi=config.CHART_DPI)
         cmap = plt.get_cmap(config.CHART_COLORMAP)
-        
-        num_cols = self.df.select_dtypes(include='number').columns.tolist()
-        cat_cols = self.df.select_dtypes(exclude='number').columns.tolist()
+
+        num_cols = df.select_dtypes(include='number').columns.tolist()
+        cat_cols = df.select_dtypes(exclude='number').columns.tolist()
 
         if self.chart_type == "bar":
             if cat_cols and num_cols:
-                x_col = cat_cols[0]
-                y_col = num_cols[0]
-                colors = cmap(range(len(self.df)))
-                ax.bar(self.df[x_col].astype(str), self.df[y_col], color=colors)
+                x_col, y_col = cat_cols[0], num_cols[0]
+                colors = [cmap(i / max(len(df) - 1, 1)) for i in range(len(df))]
+                ax.bar(df[x_col].astype(str), df[y_col], color=colors)
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
                 plt.xticks(rotation=45, ha='right')
-        
+
         elif self.chart_type == "barh":
             if cat_cols and num_cols:
-                y_col = cat_cols[0]
-                x_col = num_cols[0]
-                ax.barh(self.df[y_col].astype(str), self.df[x_col], color=cmap(range(len(self.df))))
+                y_col, x_col = cat_cols[0], num_cols[0]
+                colors = [cmap(i / max(len(df) - 1, 1)) for i in range(len(df))]
+                ax.barh(df[y_col].astype(str), df[x_col], color=colors)
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
 
         elif self.chart_type == "line":
             if cat_cols and num_cols:
-                x_col = cat_cols[0]
-                y_col = num_cols[0]
-                ax.plot(self.df[x_col].astype(str), self.df[y_col], marker='o', color=cmap(0))
+                x_col, y_col = cat_cols[0], num_cols[0]
+                ax.plot(df[x_col].astype(str), df[y_col], marker='o', color=cmap(0.2))
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
                 plt.xticks(rotation=45, ha='right')
-                
+
         elif self.chart_type == "scatter":
             if len(num_cols) >= 3:
-                x_col = num_cols[0]
-                y_col = num_cols[1]
-                size_col = num_cols[2]
+                x_col, y_col, size_col = num_cols[0], num_cols[1], num_cols[2]
                 scatter = ax.scatter(
-                    self.df[x_col], 
-                    self.df[y_col], 
-                    s=self.df[size_col] / self.df[size_col].max() * 1000, 
-                    alpha=0.6, 
-                    c=self.df[size_col],
-                    cmap=config.CHART_COLORMAP
+                    df[x_col], df[y_col],
+                    s=df[size_col] / df[size_col].max() * 1000,
+                    alpha=0.6,
+                    c=df[size_col],
+                    cmap=config.CHART_COLORMAP,
                 )
                 if cat_cols:
-                    for i, txt in enumerate(self.df[cat_cols[0]]):
-                        ax.annotate(txt, (self.df[x_col].iloc[i], self.df[y_col].iloc[i]))
+                    for i, txt in enumerate(df[cat_cols[0]]):
+                        ax.annotate(txt, (df[x_col].iloc[i], df[y_col].iloc[i]))
                 ax.set_xlabel(x_col)
                 ax.set_ylabel(y_col)
                 fig.colorbar(scatter, ax=ax, label=size_col)
-                
+
         elif self.chart_type == "pie":
             if cat_cols and num_cols:
-                labels = self.df[cat_cols[0]]
-                sizes = self.df[num_cols[0]]
-                ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=cmap(range(len(self.df))))
+                ax.pie(df[num_cols[0]], labels=df[cat_cols[0]],
+                       autopct='%1.1f%%', startangle=90,
+                       colors=[cmap(i / max(len(df) - 1, 1)) for i in range(len(df))])
                 ax.axis('equal')
+
+        # Title from query
+        if self._query:
+            ax.set_title(self._query, fontsize=12, pad=10)
 
         plt.tight_layout()
         buf = io.BytesIO()
@@ -162,35 +196,33 @@ class ChartBuilder:
 
     def _build_plotly(self) -> Optional[Any]:
         """Generates interactive Plotly chart."""
-        num_cols = self.df.select_dtypes(include='number').columns.tolist()
-        cat_cols = self.df.select_dtypes(exclude='number').columns.tolist()
-        
-        fig = None
-        if not cat_cols or not num_cols:
+        df = self._active_df
+        num_cols = df.select_dtypes(include='number').columns.tolist()
+        cat_cols = df.select_dtypes(exclude='number').columns.tolist()
+
+        if not num_cols:
             return None
 
-        x_col = cat_cols[0]
+        title = self._query or ""
+        x_col = cat_cols[0] if cat_cols else None
         y_col = num_cols[0]
 
         if self.chart_type in ("bar", "barh"):
             orientation = 'h' if self.chart_type == "barh" else 'v'
             x_val = y_col if orientation == 'h' else x_col
             y_val = x_col if orientation == 'h' else y_col
-            fig = px.bar(self.df, x=x_val, y=y_val, orientation=orientation, color=x_col, color_discrete_sequence=px.colors.qualitative.Plotly)
+            fig = px.bar(df, x=x_val, y=y_val, orientation=orientation,
+                         color=x_col, title=title,
+                         color_discrete_sequence=px.colors.qualitative.Plotly)
         elif self.chart_type == "line":
-            fig = px.line(self.df, x=x_col, y=y_col, markers=True)
-        elif self.chart_type == "scatter":
-            if len(num_cols) >= 3:
-                fig = px.scatter(
-                    self.df, 
-                    x=num_cols[0], 
-                    y=num_cols[1], 
-                    size=num_cols[2], 
-                    hover_name=cat_cols[0] if cat_cols else None,
-                    color=cat_cols[0] if cat_cols else None
-                )
-        elif self.chart_type == "pie":
-            fig = px.pie(self.df, values=y_col, names=x_col)
+            fig = px.line(df, x=x_col, y=y_col, markers=True, title=title)
+        elif self.chart_type == "scatter" and len(num_cols) >= 3:
+            fig = px.scatter(df, x=num_cols[0], y=num_cols[1], size=num_cols[2],
+                             hover_name=x_col, color=x_col, title=title)
+        elif self.chart_type == "pie" and x_col:
+            fig = px.pie(df, values=y_col, names=x_col, title=title)
+        else:
+            return None
 
         return fig
 
